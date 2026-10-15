@@ -61,6 +61,16 @@ The device at position 1 has the highest priority. FineTune will always prefer t
 
 Input and output devices have **separate priority lists** — switch between them using the tabs in edit mode.
 
+### Per-app fallback order
+
+The list above applies to the system default and to apps set to **System Audio**. An app routed to a specific device also keeps its **own** list: every device you pick for it moves to the top, and earlier picks stay below it (up to five).
+
+- When the app's current device disconnects, it moves to the next device in its own list that's still connected. Only if none is available does it fall back to the system default.
+- When a device higher in the app's list reconnects, the app moves back to it.
+- Automatic switches never change the order; only your own picks and edits do.
+
+To see or change an app's order, open its device menu. Under **Fallback Order**, hover a device to move it up or down or remove it. Choosing **System Audio** clears the app's list.
+
 > **Note:** For AirPods, taking them out of your ears and putting them back in (without the case) is handled by macOS Automatic Ear Detection. FineTune doesn't interfere with that.
 
 ## Input devices not showing

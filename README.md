@@ -69,6 +69,7 @@ That's it. Adjust sliders, route audio, and explore EQ from the menu bar.
 - **Audio routing** — Send apps to different outputs or follow system default
 - **Device priority** — Choose which device FineTune switches to when a new device connects; auto-fallback on disconnect
 - **Auto-restore** — When a device reconnects, apps automatically return to it with their volume, routing, and EQ intact
+- **Per-app fallback order** — Each app remembers the devices you picked for it. Unplug the current one and the app moves to the previous device you chose (e.g. AirPods → display speakers), not just the system default; reorder the list from the app's device menu
 
 ### 🎛 EQ & Correction
 - **10-band EQ** — 20 presets across 5 categories
