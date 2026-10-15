@@ -270,13 +270,13 @@ final class SettingsManager {
     }
 
     /// Pure function: moves `uid` to the front of `list` (inserting it if absent).
-    static func promotingDevice(_ uid: String, in list: [String]) -> [String] {
+    nonisolated static func promotingDevice(_ uid: String, in list: [String]) -> [String] {
         [uid] + list.filter { $0 != uid }
     }
 
     /// Pure function: moves `uid` by `offset` positions, clamped to the list bounds.
     /// Returns `list` unchanged when `uid` is not in it.
-    static func movingDevice(_ uid: String, by offset: Int, in list: [String]) -> [String] {
+    nonisolated static func movingDevice(_ uid: String, by offset: Int, in list: [String]) -> [String] {
         guard let index = list.firstIndex(of: uid) else { return list }
         var result = list
         result.remove(at: index)

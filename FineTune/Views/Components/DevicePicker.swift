@@ -1,6 +1,33 @@
 // FineTune/Views/Components/DevicePicker.swift
 import SwiftUI
 
+/// An app's remembered output devices, most preferred first, with callbacks to reorder them.
+/// Shown at the bottom of the device picker in single mode.
+struct DevicePriorityList {
+    struct Entry: Identifiable, Equatable {
+        let uid: String
+        let name: String
+        let isConnected: Bool
+        var id: String { uid }
+    }
+
+    let entries: [Entry]
+    /// Moves a device by an offset: -1 is up (more preferred), +1 is down.
+    let onMove: (String, Int) -> Void
+    let onRemove: (String) -> Void
+
+    /// Applies a move to `entries` locally, matching what `onMove` persists.
+    static func moving(_ uid: String, by offset: Int, in entries: [Entry]) -> [Entry] {
+        let byUID = Dictionary(uniqueKeysWithValues: entries.map { ($0.uid, $0) })
+        return SettingsManager.movingDevice(uid, by: offset, in: entries.map(\.uid)).compactMap { byUID[$0] }
+    }
+
+    /// The section is only useful once there is something to fall back to.
+    static func shouldShow(_ entries: [Entry]) -> Bool {
+        entries.count >= 2
+    }
+}
+
 /// A styled device picker dropdown with "System" option and single/multi mode support
 struct DevicePicker: View {
     /// Visual style for the trigger button.
@@ -23,6 +50,7 @@ struct DevicePicker: View {
     let onDevicesSelected: (Set<String>) -> Void  // Multi mode callback
     let onSelectFollowDefault: () -> Void
     let showModeToggle: Bool
+    var devicePriority: DevicePriorityList? = nil
 
     @State private var isExpanded = false
     @State private var isButtonHovered = false
@@ -32,6 +60,7 @@ struct DevicePicker: View {
     // Local state mirrors props for popover reactivity
     @State private var currentMode: DeviceSelectionMode = .single
     @State private var currentSelectedUIDs: Set<String> = []
+    @State private var currentPriority: [DevicePriorityList.Entry] = []
 
     // Configuration
     let triggerWidth: CGFloat
@@ -194,10 +223,14 @@ struct DevicePicker: View {
             .onChange(of: selectedDeviceUIDs) { _, newUIDs in
                 currentSelectedUIDs = newUIDs
             }
+            .onChange(of: devicePriority?.entries) { _, newEntries in
+                currentPriority = newEntries ?? []
+            }
             .onAppear {
                 // Initialize local state from props
                 currentMode = mode
                 currentSelectedUIDs = selectedDeviceUIDs
+                currentPriority = devicePriority?.entries ?? []
             }
     }
 
@@ -323,6 +356,12 @@ struct DevicePicker: View {
             }
             .scrollIndicators(.hidden)
             .frame(maxHeight: 220)
+
+            if currentMode == .single, let devicePriority, DevicePriorityList.shouldShow(currentPriority) {
+                Divider()
+                    .padding(.horizontal, 6)
+                prioritySection(devicePriority)
+            }
         }
         .frame(width: popoverWidth)
         .background(
@@ -333,6 +372,38 @@ struct DevicePicker: View {
             RoundedRectangle(cornerRadius: cornerRadius)
                 .strokeBorder(DesignTokens.Colors.glassBorder, lineWidth: 0.5)
         }
+    }
+
+    // MARK: - Priority Section
+
+    private func prioritySection(_ priority: DevicePriorityList) -> some View {
+        VStack(alignment: .leading, spacing: itemSpacing) {
+            Text("Fallback Order")
+                .font(DesignTokens.Typography.caption)
+                .foregroundStyle(DesignTokens.Colors.textTertiary)
+                .padding(.horizontal, 8)
+                .padding(.bottom, 2)
+                .help("When a device disconnects, this app moves to the next available device in this list, and moves back when a higher device reconnects.")
+
+            ForEach(Array(currentPriority.enumerated()), id: \.element.id) { index, entry in
+                DevicePriorityRow(
+                    rank: index + 1,
+                    entry: entry,
+                    canMoveUp: index > 0,
+                    canMoveDown: index < currentPriority.count - 1,
+                    onMove: { offset in
+                        currentPriority = DevicePriorityList.moving(entry.uid, by: offset, in: currentPriority)
+                        priority.onMove(entry.uid, offset)
+                    },
+                    onRemove: {
+                        currentPriority.removeAll { $0.uid == entry.uid }
+                        priority.onRemove(entry.uid)
+                    }
+                )
+            }
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 5)
     }
 
     // MARK: - Device Row
@@ -526,6 +597,81 @@ private struct DevicePickerRow: View {
             Text(device.name)
                 .lineLimit(1)
         }
+    }
+}
+
+// MARK: - Device Priority Row
+
+private struct DevicePriorityRow: View {
+    let rank: Int
+    let entry: DevicePriorityList.Entry
+    let canMoveUp: Bool
+    let canMoveDown: Bool
+    let onMove: (Int) -> Void
+    let onRemove: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        HStack(spacing: DesignTokens.Spacing.xs) {
+            Text("\(rank)")
+                .font(.system(size: 10, weight: .medium).monospacedDigit())
+                .foregroundStyle(DesignTokens.Colors.textTertiary)
+                .frame(width: 16)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(entry.name)
+                    .lineLimit(1)
+                    .foregroundStyle(entry.isConnected ? .primary : DesignTokens.Colors.textTertiary)
+                if !entry.isConnected {
+                    Text("Not connected")
+                        .font(DesignTokens.Typography.caption)
+                        .foregroundStyle(DesignTokens.Colors.textQuaternary)
+                }
+            }
+
+            Spacer(minLength: 0)
+
+            // Revealed on hover so device names get the full width otherwise;
+            // VoiceOver users get the same operations as accessibility actions below.
+            if isHovered {
+                controlButton("chevron.up", help: "Move Up", enabled: canMoveUp) { onMove(-1) }
+                controlButton("chevron.down", help: "Move Down", enabled: canMoveDown) { onMove(1) }
+                controlButton("xmark", help: "Remove", enabled: true, action: onRemove)
+            }
+        }
+        .font(.system(size: 11))
+        .padding(.horizontal, 8)
+        .padding(.vertical, entry.isConnected ? 0 : 3)
+        .frame(minHeight: 26)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 5)
+                .fill(isHovered ? Color.primary.opacity(0.06) : Color.clear)
+        )
+        .contentShape(Rectangle())
+        .whenHovered { isHovered = $0 }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(rank). \(entry.name)\(entry.isConnected ? "" : ", not connected")")
+        .accessibilityActions {
+            if canMoveUp { Button("Move Up") { onMove(-1) } }
+            if canMoveDown { Button("Move Down") { onMove(1) } }
+            Button("Remove", action: onRemove)
+        }
+    }
+
+    private func controlButton(_ symbol: String, help: String, enabled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 9, weight: .semibold))
+                .frame(width: 18, height: 18)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(enabled ? DesignTokens.Colors.textSecondary : DesignTokens.Colors.textQuaternary)
+        .disabled(!enabled)
+        .help(help)
+        .accessibilityLabel(help)
     }
 }
 

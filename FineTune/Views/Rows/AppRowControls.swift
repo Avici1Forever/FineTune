@@ -22,6 +22,7 @@ struct AppRowControls: View {
     let onDevicesSelected: (Set<String>) -> Void
     let onDeviceModeChange: (DeviceSelectionMode) -> Void
     let onSelectFollowDefault: () -> Void
+    var devicePriority: DevicePriorityList? = nil
     let onEQToggle: () -> Void
     var isRowFocused: Bool = false
 
@@ -125,6 +126,7 @@ struct AppRowControls: View {
                 onDevicesSelected: onDevicesSelected,
                 onSelectFollowDefault: onSelectFollowDefault,
                 showModeToggle: true,
+                devicePriority: devicePriority,
                 triggerWidth: 0,
                 triggerStyle: .iconOnly
             )

@@ -27,6 +27,7 @@ struct InactiveAppRow: View {
     let onDevicesSelected: (Set<String>) -> Void
     let onDeviceModeChange: (DeviceSelectionMode) -> Void
     let onSelectFollowDefault: () -> Void
+    let devicePriority: DevicePriorityList?
     let eqSettings: EQSettings
     let userPresets: [UserEQPreset]
     let onEQChange: (EQSettings) -> Void
@@ -60,6 +61,7 @@ struct InactiveAppRow: View {
         onDevicesSelected: @escaping (Set<String>) -> Void = { _ in },
         onDeviceModeChange: @escaping (DeviceSelectionMode) -> Void = { _ in },
         onSelectFollowDefault: @escaping () -> Void = {},
+        devicePriority: DevicePriorityList? = nil,
         eqSettings: EQSettings = EQSettings(),
         userPresets: [UserEQPreset] = [],
         onEQChange: @escaping (EQSettings) -> Void = { _ in },
@@ -90,6 +92,7 @@ struct InactiveAppRow: View {
         self.onDevicesSelected = onDevicesSelected
         self.onDeviceModeChange = onDeviceModeChange
         self.onSelectFollowDefault = onSelectFollowDefault
+        self.devicePriority = devicePriority
         self.eqSettings = eqSettings
         self.userPresets = userPresets
         self.onEQChange = onEQChange
@@ -160,6 +163,7 @@ struct InactiveAppRow: View {
                     onDevicesSelected: onDevicesSelected,
                     onDeviceModeChange: onDeviceModeChange,
                     onSelectFollowDefault: onSelectFollowDefault,
+                    devicePriority: devicePriority,
                     onEQToggle: onEQToggle,
                     isRowFocused: isFocused
                 )

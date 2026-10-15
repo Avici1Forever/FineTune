@@ -23,6 +23,7 @@ struct AppRowWithLevelPolling: View {
     let onDevicesSelected: (Set<String>) -> Void
     let onDeviceModeChange: (DeviceSelectionMode) -> Void
     let onSelectFollowDefault: () -> Void
+    let devicePriority: DevicePriorityList?
     let onAppActivate: () -> Void
     let eqSettings: EQSettings
     let userPresets: [UserEQPreset]
@@ -59,6 +60,7 @@ struct AppRowWithLevelPolling: View {
         onDevicesSelected: @escaping (Set<String>) -> Void = { _ in },
         onDeviceModeChange: @escaping (DeviceSelectionMode) -> Void = { _ in },
         onSelectFollowDefault: @escaping () -> Void = {},
+        devicePriority: DevicePriorityList? = nil,
         onAppActivate: @escaping () -> Void = {},
         eqSettings: EQSettings = EQSettings(),
         userPresets: [UserEQPreset] = [],
@@ -91,6 +93,7 @@ struct AppRowWithLevelPolling: View {
         self.onDevicesSelected = onDevicesSelected
         self.onDeviceModeChange = onDeviceModeChange
         self.onSelectFollowDefault = onSelectFollowDefault
+        self.devicePriority = devicePriority
         self.onAppActivate = onAppActivate
         self.eqSettings = eqSettings
         self.userPresets = userPresets
@@ -125,6 +128,7 @@ struct AppRowWithLevelPolling: View {
             onDevicesSelected: onDevicesSelected,
             onDeviceModeChange: onDeviceModeChange,
             onSelectFollowDefault: onSelectFollowDefault,
+            devicePriority: devicePriority,
             onAppActivate: onAppActivate,
             eqSettings: eqSettings,
             userPresets: userPresets,

@@ -896,6 +896,7 @@ struct MenuBarPopupView: View {
                 onSelectFollowDefault: {
                     audioEngine.setDevice(for: app, deviceUID: nil)
                 },
+                devicePriority: devicePriorityList(forIdentifier: app.persistenceIdentifier),
                 onAppActivate: {
                     activateApp(pid: app.id, bundleID: app.bundleID)
                 },
@@ -927,6 +928,26 @@ struct MenuBarPopupView: View {
             )
             .id(PopupKeyboardNavModel.RowID.app(persistenceID: displayableApp.id))
         }
+    }
+
+    /// The app's remembered output devices with reorder/remove callbacks for the device picker.
+    private func devicePriorityList(forIdentifier identifier: String) -> DevicePriorityList {
+        let connected = Set(audioEngine.outputDevices.map(\.uid))
+        return DevicePriorityList(
+            entries: audioEngine.devicePriority(forIdentifier: identifier).map { uid in
+                DevicePriorityList.Entry(
+                    uid: uid,
+                    name: audioEngine.outputDeviceName(for: uid) ?? uid,
+                    isConnected: connected.contains(uid)
+                )
+            },
+            onMove: { uid, offset in
+                audioEngine.moveDeviceInPriority(uid, by: offset, forIdentifier: identifier)
+            },
+            onRemove: { uid in
+                audioEngine.removeDeviceFromPriority(uid, forIdentifier: identifier)
+            }
+        )
     }
 
     /// Row for a pinned inactive app (not currently producing audio)
@@ -967,6 +988,7 @@ struct MenuBarPopupView: View {
             onSelectFollowDefault: {
                 audioEngine.setDeviceRoutingForInactive(identifier: identifier, deviceUID: nil)
             },
+            devicePriority: devicePriorityList(forIdentifier: identifier),
             eqSettings: audioEngine.getEQSettingsForInactive(identifier: identifier),
             userPresets: userPresets,
             onEQChange: { settings in
