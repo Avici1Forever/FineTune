@@ -94,7 +94,8 @@ final class SettingsManager {
     struct Settings: Codable {
         var version: Int = 12
         var appVolumes: [String: Float] = [:]
-        var appDeviceRouting: [String: String] = [:]  // bundleID → deviceUID
+        var appDeviceRouting: [String: String] = [:]  // bundleID → deviceUID (mirrors appDevicePriority.first)
+        var appDevicePriority: [String: [String]] = [:]  // bundleID → output device UIDs, most preferred first
         var appMutes: [String: Bool] = [:]  // bundleID → isMuted
         var appBoosts: [String: Float] = [:]  // bundleID → boost rawValue (1.0, 2.0, 3.0, 4.0)
         var appEQSettings: [String: EQSettings] = [:]  // bundleID → EQ settings
@@ -128,6 +129,7 @@ final class SettingsManager {
         // Device priority (ordered device UIDs, highest priority first)
         var outputDevicePriority: [String] = []
         var inputDevicePriority: [String] = []
+        var outputDeviceNames: [String: String] = [:]  // device UID → last seen name (for disconnected devices)
 
         // Hidden devices (UIDs of devices suppressed from the main view)
         var hiddenOutputDeviceUIDs: Set<String> = []
@@ -150,6 +152,7 @@ final class SettingsManager {
                 .filter { $0.value.isFinite && $0.value >= 0 }
                 .mapValues { min($0, 1.0) }  // Clamp old volumes > 1.0 (boost is now per-app)
             appDeviceRouting = try c.decodeIfPresent([String: String].self, forKey: .appDeviceRouting) ?? [:]
+            appDevicePriority = try c.decodeIfPresent([String: [String]].self, forKey: .appDevicePriority) ?? [:]
             appMutes = try c.decodeIfPresent([String: Bool].self, forKey: .appMutes) ?? [:]
             appBoosts = try c.decodeIfPresent([String: Float].self, forKey: .appBoosts) ?? [:]
             appEQSettings = try c.decodeIfPresent([String: EQSettings].self, forKey: .appEQSettings) ?? [:]
@@ -182,6 +185,7 @@ final class SettingsManager {
             deviceIconOverrides = try c.decodeIfPresent([String: String].self, forKey: .deviceIconOverrides) ?? [:]
             outputDevicePriority = try c.decodeIfPresent([String].self, forKey: .outputDevicePriority) ?? []
             inputDevicePriority = try c.decodeIfPresent([String].self, forKey: .inputDevicePriority) ?? []
+            outputDeviceNames = try c.decodeIfPresent([String: String].self, forKey: .outputDeviceNames) ?? [:]
             hiddenOutputDeviceUIDs = try c.decodeIfPresent(Set<String>.self, forKey: .hiddenOutputDeviceUIDs) ?? []
             hiddenInputDeviceUIDs = try c.decodeIfPresent(Set<String>.self, forKey: .hiddenInputDeviceUIDs) ?? []
             deviceAutoEQ = try c.decodeIfPresent([String: AutoEQSelection].self, forKey: .deviceAutoEQ) ?? [:]
@@ -223,9 +227,62 @@ final class SettingsManager {
         settings.appDeviceRouting[identifier]
     }
 
+    /// Records an explicit device choice: the device moves to the top of the app's
+    /// device priority list, keeping previous choices as fallbacks.
     func setDeviceRouting(for identifier: String, deviceUID: String) {
-        settings.appDeviceRouting[identifier] = deviceUID
+        writeDevicePriority(
+            Self.promotingDevice(deviceUID, in: getDevicePriority(for: identifier)),
+            for: identifier
+        )
+    }
+
+    // MARK: - Per-App Device Priority
+
+    /// Maximum number of devices remembered per app.
+    static let maxAppDevicePriorityCount = 5
+
+    /// The app's output devices, most preferred first. Empty means the app follows
+    /// the system default. `appDeviceRouting` stays authoritative for the top entry
+    /// so settings written by older versions (routing only) still resolve correctly.
+    func getDevicePriority(for identifier: String) -> [String] {
+        guard let routed = settings.appDeviceRouting[identifier] else { return [] }
+        let saved = settings.appDevicePriority[identifier] ?? []
+        return [routed] + saved.filter { $0 != routed }
+    }
+
+    /// Replaces the app's device priority list (manual reorder/removal).
+    /// An empty list makes the app follow the system default.
+    func setDevicePriority(for identifier: String, _ uids: [String]) {
+        writeDevicePriority(uids, for: identifier)
+    }
+
+    private func writeDevicePriority(_ uids: [String], for identifier: String) {
+        var seen = Set<String>()
+        let list = Array(uids.filter { seen.insert($0).inserted }.prefix(Self.maxAppDevicePriorityCount))
+        if let first = list.first {
+            settings.appDeviceRouting[identifier] = first
+            settings.appDevicePriority[identifier] = list
+        } else {
+            settings.appDeviceRouting.removeValue(forKey: identifier)
+            settings.appDevicePriority.removeValue(forKey: identifier)
+        }
         scheduleSave()
+    }
+
+    /// Pure function: moves `uid` to the front of `list` (inserting it if absent).
+    static func promotingDevice(_ uid: String, in list: [String]) -> [String] {
+        [uid] + list.filter { $0 != uid }
+    }
+
+    /// Pure function: moves `uid` by `offset` positions, clamped to the list bounds.
+    /// Returns `list` unchanged when `uid` is not in it.
+    static func movingDevice(_ uid: String, by offset: Int, in list: [String]) -> [String] {
+        guard let index = list.firstIndex(of: uid) else { return list }
+        var result = list
+        result.remove(at: index)
+        let target = min(max(index + offset, 0), result.count)
+        result.insert(uid, at: target)
+        return result
     }
 
     /// Returns true if the app follows system default (no explicit device routing saved)
@@ -235,8 +292,7 @@ final class SettingsManager {
 
     /// Clears device routing for an app, making it follow system default
     func setFollowDefault(for identifier: String) {
-        settings.appDeviceRouting.removeValue(forKey: identifier)
-        scheduleSave()
+        writeDevicePriority([], for: identifier)
     }
 
     // MARK: - System Sounds Settings
@@ -349,6 +405,7 @@ final class SettingsManager {
         settings.appBoosts.removeValue(forKey: identifier)
         settings.appMutes.removeValue(forKey: identifier)
         settings.appDeviceRouting.removeValue(forKey: identifier)
+        settings.appDevicePriority.removeValue(forKey: identifier)
         settings.appEQSettings.removeValue(forKey: identifier)
         settings.appDeviceSelectionMode.removeValue(forKey: identifier)
         settings.appSelectedDeviceUIDs.removeValue(forKey: identifier)
@@ -484,6 +541,17 @@ final class SettingsManager {
     func ensureDeviceInPriority(_ uid: String) {
         guard !settings.outputDevicePriority.contains(uid) else { return }
         settings.outputDevicePriority.append(uid)
+        scheduleSave()
+    }
+
+    /// Last seen name of an output device, so disconnected devices can still be labelled.
+    func outputDeviceName(for uid: String) -> String? {
+        settings.outputDeviceNames[uid]
+    }
+
+    func rememberOutputDeviceName(_ name: String, for uid: String) {
+        guard settings.outputDeviceNames[uid] != name else { return }
+        settings.outputDeviceNames[uid] = name
         scheduleSave()
     }
 
@@ -834,6 +902,7 @@ final class SettingsManager {
         settings.appVolumes.removeAll()
         settings.appBoosts.removeAll()
         settings.appDeviceRouting.removeAll()
+        settings.appDevicePriority.removeAll()
         settings.appMutes.removeAll()
         settings.appEQSettings.removeAll()
         settings.pinnedApps.removeAll()
@@ -854,6 +923,7 @@ final class SettingsManager {
         settings.deviceIconOverrides.removeAll()
         settings.outputDevicePriority.removeAll()
         settings.inputDevicePriority.removeAll()
+        settings.outputDeviceNames.removeAll()
         settings.hiddenOutputDeviceUIDs.removeAll()
         settings.hiddenInputDeviceUIDs.removeAll()
         settings.autoEQPreampEnabled = true
