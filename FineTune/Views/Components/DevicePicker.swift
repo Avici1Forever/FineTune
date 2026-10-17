@@ -212,7 +212,9 @@ struct DevicePicker: View {
                 PopoverHost(
                     isPresented: $isExpanded,
                     preferredColorScheme: appearancePreference.swiftUIColorScheme,
-                    nsAppearance: appearancePreference.nsAppearance
+                    nsAppearance: appearancePreference.nsAppearance,
+                    // App-row triggers sit at the right edge of the popup, so open leftward
+                    alignment: triggerStyle == .iconOnly ? .trailing : .leading
                 ) {
                     dropdownContent
                 }
